@@ -17,8 +17,9 @@ function App() {
   const [sortOrder, setSortOrder] = useState({});
   const [isSearching, setIsSearching] = useState(false);
   const [currentCity, setCurrentCity] = useState('');
-  const [progress, setProgress] = useState(0); // New state variable for progress
-  const [totalCities, setTotalCities] = useState(0); // Total number of cities
+  const [progress, setProgress] = useState(0);
+  const [totalCities, setTotalCities] = useState(0);
+  const [isCancelled, setIsCancelled] = useState(false); // New state variable for cancellation
 
   const search = async () => {
     if (!taxonomy && !firstName && !lastName && !state) {
@@ -31,10 +32,11 @@ function App() {
     setMessage('');
     setCurrentCity('');
     setProgress(0);
+    setIsCancelled(false); // Reset cancellation flag
 
     const stateCode = stateNameToCode[state];
     const cities = statesAndCities[state] || [];
-    setTotalCities(cities.length); // Set the total number of cities
+    setTotalCities(cities.length);
 
     if (cities.length === 0) {
       setMessage('No cities found for the selected state.');
@@ -42,13 +44,18 @@ function App() {
       return;
     }
 
-    let totalResults = 0; // Keep track of total results
+    let totalResults = 0;
 
     for (let i = 0; i < cities.length; i++) {
+      if (isCancelled) {
+        setMessage(`Search stopped by user. ${totalResults} results found.`);
+        break;
+      }
+
       const city = cities[i];
       console.log(`Executing ${state} on ${city}`);
-      setCurrentCity(city); // Update current city being fetched
-      setProgress(((i + 1) / cities.length) * 100); // Update progress
+      setCurrentCity(city);
+      setProgress(((i + 1) / cities.length) * 100);
 
       try {
         const response = await fetch('/api/search', {
@@ -82,12 +89,23 @@ function App() {
         console.error(error);
       }
 
-  
+      // Add a delay between requests
+      await new Promise((resolve) => setTimeout(resolve, 2000));
     }
 
     setIsSearching(false);
-    setCurrentCity(''); // Clear current city
-    setMessage(`${totalResults} total results found.`);
+    setCurrentCity('');
+    if (!isCancelled) {
+      setMessage(`${totalResults} total results found.`);
+    }
+  };
+
+  const stopSearch = () => {
+    setIsCancelled(true);
+    setIsSearching(false);
+    setCurrentCity('');
+    setProgress(0);
+    setMessage('Search stopped by user.');
   };
 
   const sortTable = (columnIndex) => {
@@ -199,6 +217,15 @@ function App() {
         >
           {isSearching ? 'Searching...' : 'Search'}
         </button>
+        {isSearching && (
+          <button
+            type="button"
+            className="btn btn-danger ml-2 ms-3"
+            onClick={stopSearch}
+          >
+            Stop
+          </button>
+        )}
         <button
           type="button"
           className="btn btn-success float-end"
