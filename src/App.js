@@ -88,9 +88,6 @@ function App() {
       } catch (error) {
         console.error(error);
       }
-
-      // Add a delay between requests
-      await new Promise((resolve) => setTimeout(resolve, 2000));
     }
 
     setIsSearching(false);
