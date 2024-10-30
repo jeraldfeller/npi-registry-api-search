@@ -20,7 +20,7 @@ module.exports = async (req, res) => {
       res.setHeader('Set-Cookie', 'auth=true; HttpOnly; Path=/; Max-Age=86400'); // 1 day expiration
       res.status(200).json({ message: 'Authentication successful.' });
     } else {
-      res.status(401).json({ error: 'Invalid password.', currentPassword: password, validPassword: validPassword });
+      res.status(401).json({ error: 'Invalid password.'});
     }
   };
   
