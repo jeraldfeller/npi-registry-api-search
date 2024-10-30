@@ -1,6 +1,6 @@
 // src/App.js
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './App.css';
 import Login from './Login'; // Import the Login component
@@ -24,6 +24,14 @@ function App() {
   const [progress, setProgress] = useState(0);
   const [totalCities, setTotalCities] = useState(0);
   const [isCancelled, setIsCancelled] = useState(false); // New state variable for cancellation
+
+  // New state variables for pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const resultsPerPage = 20;
+
+  // Use refs for managing search cancellation
+  const searchIdRef = useRef(0);
+  const abortControllerRef = useRef(null);
 
 
   // Check authentication status on component mount
@@ -62,18 +70,31 @@ function App() {
 
 
 
+  // Search function with updated cancellation logic
   const search = async () => {
     if (!taxonomy && !firstName && !lastName && !state) {
       alert('Please provide at least one search criterion.');
       return;
     }
 
+    // Increment searchId for new search
+    const currentSearchId = ++searchIdRef.current;
+
+    // Abort any ongoing fetch requests
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    // Create a new AbortController for this search
+    abortControllerRef.current = new AbortController();
+    const { signal } = abortControllerRef.current;
+
     setIsSearching(true);
     setCurrentResults([]);
     setMessage('');
     setCurrentCity('');
     setProgress(0);
-    setIsCancelled(false); // Reset cancellation flag
+    setCurrentPage(1); // Reset currentPage
 
     const stateCode = stateNameToCode[state];
     const cities = statesAndCities[state] || [];
@@ -88,8 +109,9 @@ function App() {
     let totalResults = 0;
 
     for (let i = 0; i < cities.length; i++) {
-      if (isCancelled) {
-        setMessage(`Search stopped by user. ${totalResults} results found.`);
+      // Check if a new search has started
+      if (searchIdRef.current !== currentSearchId) {
+        // Exit the loop if a new search has started
         break;
       }
 
@@ -112,11 +134,23 @@ function App() {
             countryCode: 'US',
             npiType,
           }),
+          signal, // Pass the signal to fetch
         });
+
+        // Check if the response was aborted
+        if (signal.aborted) {
+          console.log('Fetch aborted');
+          break;
+        }
 
         const data = await response.json();
 
         if (data.results && data.results.length > 0) {
+          // Check again if a new search has started
+          if (searchIdRef.current !== currentSearchId) {
+            break;
+          }
+
           setCurrentResults((prevResults) => {
             const updatedResults = [...prevResults, ...data.results];
             totalResults = updatedResults.length;
@@ -127,19 +161,33 @@ function App() {
           setMessage(`${totalResults} results found so far.`);
         }
       } catch (error) {
-        console.error(error);
+        if (error.name === 'AbortError') {
+          console.log('Fetch aborted');
+          break;
+        } else {
+          console.error(error);
+        }
       }
     }
 
-    setIsSearching(false);
-    setCurrentCity('');
-    if (!isCancelled) {
+    // Check if the search was not cancelled
+    if (searchIdRef.current === currentSearchId) {
+      setIsSearching(false);
+      setCurrentCity('');
       setMessage(`${totalResults} total results found.`);
+      abortControllerRef.current = null;
     }
   };
 
   const stopSearch = () => {
-    setIsCancelled(true);
+    // Increment searchId to invalidate the current search
+    searchIdRef.current++;
+
+    // Abort ongoing fetch requests
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
     setIsSearching(false);
     setCurrentCity('');
     setProgress(0);
@@ -162,6 +210,7 @@ function App() {
     });
 
     setCurrentResults(sortedResults);
+    setCurrentPage(1); // Reset to first page when sorting
   };
 
   const downloadCSV = () => {
@@ -176,6 +225,22 @@ function App() {
     link.click();
     URL.revokeObjectURL(link.href);
   };
+
+  // Pagination calculations
+  const totalPages = Math.ceil(currentResults.length / resultsPerPage) || 1;
+  const indexOfLastResult = currentPage * resultsPerPage;
+  const indexOfFirstResult = indexOfLastResult - resultsPerPage;
+  const currentResultsToDisplay = currentResults.slice(indexOfFirstResult, indexOfLastResult);
+
+  const handlePageChange = (newPage) => {
+    setCurrentPage(newPage);
+  };
+
+  // Generate page numbers for pagination (optional)
+  const pageNumbers = [];
+  for (let i = 1; i <= totalPages; i++) {
+    pageNumbers.push(i);
+  }
 
   return (
     <div className="container-fluid">
@@ -322,8 +387,8 @@ function App() {
           </tr>
         </thead>
         <tbody id="resultsBody">
-          {currentResults.map((row, index) => (
-            <tr key={index}>
+          {currentResultsToDisplay.map((row, index) => (
+            <tr key={index + indexOfFirstResult}>
               {row.map((cell, cellIndex) => (
                 <td key={cellIndex}>{cell}</td>
               ))}
@@ -331,6 +396,42 @@ function App() {
           ))}
         </tbody>
       </table>
+      {/* Pagination Controls */}
+      {currentResults.length > 0 && (
+        <div className="pagination">
+          <button
+            className="btn btn-outline-secondary"
+            onClick={() => handlePageChange(1)}
+            disabled={currentPage === 1}
+          >
+            First
+          </button>
+          <button
+            className="btn btn-outline-secondary"
+            onClick={() => handlePageChange(currentPage - 1)}
+            disabled={currentPage === 1}
+          >
+            Previous
+          </button>
+          <span className="mx-2">
+            Page {currentPage} of {totalPages}
+          </span>
+          <button
+            className="btn btn-outline-secondary"
+            onClick={() => handlePageChange(currentPage + 1)}
+            disabled={currentPage === totalPages}
+          >
+            Next
+          </button>
+          <button
+            className="btn btn-outline-secondary"
+            onClick={() => handlePageChange(totalPages)}
+            disabled={currentPage === totalPages}
+          >
+            Last
+          </button>
+        </div>
+      )}
     </div>
   );
 }
