@@ -1,12 +1,16 @@
 // src/App.js
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './App.css';
+import Login from './Login'; // Import the Login component
 import { statesAndCities } from './data/statesAndCities';
 import { stateNameToCode } from './data/stateNameToCode';
 
 function App() {
+
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
   const [taxonomy, setTaxonomy] = useState('');
   const [npiType, setNpiType] = useState('');
   const [firstName, setFirstName] = useState('');
@@ -20,6 +24,43 @@ function App() {
   const [progress, setProgress] = useState(0);
   const [totalCities, setTotalCities] = useState(0);
   const [isCancelled, setIsCancelled] = useState(false); // New state variable for cancellation
+
+
+  // Check authentication status on component mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const response = await fetch('/api/check-auth', {
+          credentials: 'include',
+        });
+        const data = await response.json();
+        setIsAuthenticated(data.authenticated);
+      } catch (error) {
+        console.error('Authentication check failed.');
+      }
+    };
+
+    checkAuth();
+  }, []);
+
+
+  const handleLogout = async () => {
+    await fetch('/api/logout', {
+      method: 'POST',
+      credentials: 'include',
+    });
+    setIsAuthenticated(false);
+  };
+
+  const handleLogin = () => {
+    setIsAuthenticated(true);
+  };
+
+  if (!isAuthenticated) {
+    return <Login onLogin={handleLogin} />;
+  }
+
+
 
   const search = async () => {
     if (!taxonomy && !firstName && !lastName && !state) {
@@ -138,6 +179,9 @@ function App() {
 
   return (
     <div className="container-fluid">
+      <button className="btn btn-secondary float-right" onClick={handleLogout}>
+        Log Out
+      </button>
       <h1 className="text-center">Search NPI Registry</h1>
       <form id="searchForm" className="mt-4">
         {/* Form Fields */}
